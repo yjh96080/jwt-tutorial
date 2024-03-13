@@ -28,8 +28,10 @@ jobs:
 
     //- name: Set up application.properties
     //  run: echo "${{ secrets.APPLICATION }}" > ./src/main/resources/application.properties
-
-    - name: Build with Gradle
+    - name: chmod gradlew
+      run: chmod +x ./gradlew
+  
+    - name: Build with Gradle    
       run: ./gradlew build
 
     - name: Build the Docker image
