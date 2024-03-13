@@ -26,8 +26,9 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
 
-    //- name: Set up application.properties
-    //  run: echo "${{ secrets.APPLICATION }}" > ./src/main/resources/application.properties
+    - name: Set up application.properties
+      run: echo "${{ secrets.APPLICATION }}" > ./src/main/resources/application.properties
+      
     - name: chmod gradlew
       run: chmod +x ./gradlew
   
