@@ -26,7 +26,6 @@
      with:
        java-version: '17'
        distribution: "temurin"
-	  
    # Github secrets로부터 데이터를 받아서, 워크 플로우에 파일을 생성
    - name: Make application.properties
      run: |
