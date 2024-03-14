@@ -1,69 +1,68 @@
-name: Deploy to AWS EC2 using Docker
+ name: CD with Gradle
+	
+ # 언제 이 파일의 내용이 실행될 것인지 정의합니다. 
+ # 여기서는 main 브랜치에 코드가 push 되거나 pull_request되었을 때 실행할 것을 말하고 있습니다.
+ on:
+   push:
+     branches: [ "main" ]
+   pull_request:
+     branches: [ "main" ]
 
-on:
-  push:
-    branches:
-      - main
+ # 코드의 내용을 이 파일을 실행하여 action을 수행하는 주체(Github Actions에서 사용하는 VM)가 읽을 수 있도록 허용합니다.
+ permissions:
+   contents: read
 
-env:
-  DOCKER_IMAGE_NAME: 
-  EC2_HOST: 
-  EC2_SSH_USER: ec2-user
-  PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+ # 실제 실행될 내용들을 정의합니다.
+ jobs:
+   build:
+     runs-on: ubuntu-latest # ubuntu 최신 버전에서 script를 실행
 
-jobs:
-  build-and-push-docker:
+   steps:
+   # 지정한 저장소(현재 REPO)에서 코드를 워크플로우 환경으로 가져오도록 하는 github action
+   - uses: actions/checkout@v3
 
-    runs-on: ubuntu-latest
+   # open jdk 17 버전 환경을 세팅
+   - name: Set up JDK 17
+     uses: actions/setup-java@v3
+     with:
+       java-version: '17'
+       distribution: "adopt"
+	  
+   # Github secrets로부터 데이터를 받아서, 워크 플로우에 파일을 생성
+   - name: Make application.properties
+     run: |
+         cd ./src/main/resources
+         touch ./application.properties
+         echo "${{ secrets.PROPERTIES }}" > ./application.properties
+     shell: bash	 
+   
+   # gradle을 통해 소스를 빌드.
+   - name: Build with Gradle
+     run: |
+          chmod +x ./gradlew
+          ./gradlew clean build -x test
 
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+   # dockerfile을 통해 이미지를 빌드하고, 이를 docker repo로 push 합니다.
+   # 이 때 사용되는 ${{ secrets.DOCKER_REPO }}/directors-dev 가 위에서 만든 도커 repository 입니다.
+   - name: Docker build & push to docker repo
+     run: |
+          docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+          docker build -f Dockerfile -t ${{ secrets.DOCKER_REPO }}/directors-dev .
+          docker push ${{ secrets.DOCKER_REPO }}/directors-dev
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-
-    - name: Set up application.properties
-      run: echo "${{ secrets.APPLICATION }}" > ./src/main/resources/application.properties
-      
-    - name: chmod gradlew
-      run: chmod +x ./gradlew
-  
-    - name: Build with Gradle    
-      run: ./gradlew build
-
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag ${{ env.DOCKER_IMAGE_NAME }}:latest
-
-    - name: Login to Docker Hub using Access Token
-      run: echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
-
-    - name: Push the Docker image
-      run: docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
-
-
-  deploy-to-ec2:
-
-    needs: build-and-push-docker
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ env.EC2_HOST }}
-        username: ${{ env.EC2_SSH_USER }}
-        key: ${{ env.PRIVATE_KEY }}
-        script: |
-          CONTAINER_ID=$(sudo docker ps -q --filter "publish=80-8080")
-
-          if [ ! -z "$CONTAINER_ID" ]; then
-            sudo docker stop $CONTAINER_ID
-            sudo docker rm $CONTAINER_ID
-          fi
-
-          sudo docker pull ${{ env.DOCKER_HUB }}
-          sudo docker run --name ${{ env.CONTAINER_NAME }} -d -p 80:8080 -e TZ=Asia/Seoul ${{ env.DOCKER_HUB }}
+   # appleboy/ssh-action@master 액션을 사용하여 지정한 서버에 ssh로 접속하고, script를 실행합니다.
+   # script의 내용은 도커의 기존 프로세스들을 제거하고, docker repo로부터 방금 위에서 push한 내용을 pull 받아 실행하는 것입니다. 
+   # 실행 시, docker-compose를 사용합니다.
+   - name: Deploy to server
+     uses: appleboy/ssh-action@master
+     id: deploy
+     with:
+       host: ${{ secrets.HOST }}
+       username: ubuntu
+       key: ${{ secrets.KEY }}
+       envs: GITHUB_SHA
+     script: |
+       sudo docker rm -f $(docker ps -qa)
+       sudo docker pull ${{ secrets.DOCKER_REPO }}/directors-dev
+       docker-compose up -d
+       docker image prune -f
