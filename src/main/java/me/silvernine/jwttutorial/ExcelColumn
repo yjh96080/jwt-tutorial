@@ -1,0 +1,18 @@
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.FIELD)
+public @interface ExcelColumn {
+
+
+	//헤더 이름
+    String HeaderName() default "";
+
+    //데이터 타입
+    ExportColumn.DataType DataType() default ExportColumn.DataType.none;
+
+    //cell 넓이
+    int ColumnWidth() default 4000;
+
+    //cell 정렬 타입
+    ExportColumn.FlexType FlexType() default ExportColumn.FlexType.right;
+
+}
