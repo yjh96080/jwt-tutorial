@@ -1,0 +1,25 @@
+@GetMapping("/view/product/test-excel-ajax")
+	private void productTestExcelDownload(
+			@ModelAttribute ProductCnd productCnd
+			,@AuthenticationPrincipal LoginInfo loginInfo
+			,HttpServletResponse response
+            ,HttpHeader header
+			)throws Exception{
+
+		//한 시트당 뿌려질 row 갯수
+		//DB cmn_code_c > cat_cd = 9 의 code 값
+		CodeC codeC = codeService.findByCodeCIdCatCd(9);
+		final int rowcount = codeC.getCodeCId().getCode();
+
+		//리스트 조회
+		List<ProductTestDto> resultList = productService.testProductListByProductCnd(productCnd);
+
+		//ExcelExport 생성 ( 리스트, Class Type, 시트당 row수, 시트명)
+		ExcelExport<ProductTestDto> excelExport = new ExcelExport<>(resultList, ProductTestDto.class, rowcount, "상품목록");
+		try {
+			//엑셀 추출 ( HttpServletResponse, 엑셀명 )
+			excelExport.write(response, "상품_엑셀_다운로드");
+		} catch (Exception e) {
+			log.error(e.toString());
+		}
+	}
