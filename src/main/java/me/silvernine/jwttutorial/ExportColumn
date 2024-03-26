@@ -1,0 +1,26 @@
+public class ExportColumn {
+
+	//필드 데이터 타입
+    public enum DataType {
+
+        none(CellType.STRING),
+        date(CellType.STRING),
+        percentage(CellType.NUMERIC),
+        datetime(CellType.STRING),
+        bool(CellType.BOOLEAN),
+        //통화
+        currency(CellType.STRING),
+        number(CellType.NUMERIC);
+
+        private CellType cellType;
+
+        DataType(CellType cellType) {
+            this.cellType = cellType;
+        }
+    }
+
+    //필드 정렬 타입
+    public enum FlexType {
+    	left, center, right;
+    }
+}
