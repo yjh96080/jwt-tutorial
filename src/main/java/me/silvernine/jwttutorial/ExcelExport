@@ -1,0 +1,264 @@
+public class ExcelExport<T> {
+	//row 시작 위치
+    private static final int ROW_START_INDEX = 0;
+    //cell 시작 위치
+    private static final int COLUMN_START_INDEX = 0;
+
+    private SXSSFWorkbook wb;
+    private SXSSFSheet[] sheet;
+
+
+    /**
+     * @param data 		- 엑셀로 추출할 Data
+     * @param type		- @ExcelColumn 를 가지고 있는 필드의 대한 정보로 엑셀 추출
+     * @param rowCount  - 한 시트 당 출력 될 row 수
+     * @param title     - 시트 이름 ex) 시트제목_0, 시트제목_1
+     */
+    public ExcelExport(List<T> data, Class<T> type, int rowCount, String title) {
+        this.wb = new SXSSFWorkbook();
+        renderExcel(data, type, rowCount, title);
+    }
+
+    /**
+     * 엑셀 시트 생성 및 데이터 렌더링
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param data
+     * @param objectType
+     * @param rowCount
+     * @param title
+     * @return : void
+     */
+    private void renderExcel(List<T> data, Class<T> objectType, int rowCount,String title){
+
+    	//data가 비었을 경우 반환
+    	if(data.isEmpty()) return;
+
+    	//data 총 건수
+    	int totCnt = data.size();
+
+    	//시트 수
+    	int SheetCnt = (int)Math.ceil(totCnt / rowCount)+1;
+
+    	//시트 이름 목록
+	    String[] strDownExcelName = new String[SheetCnt];
+
+	    sheet = new SXSSFSheet[SheetCnt];
+
+	    //각 시트별 시트이름 및 헤더 생성
+	    for (int m = 0; m < SheetCnt; m++) {
+	    	strDownExcelName[m] = title+"_"+m;
+	    	sheet[m] = wb.createSheet(strDownExcelName[m]);
+
+	    	//시트 별 헤더 생성 (시트, row 위치, cell 위치, 데이터 Class Type)
+	    	createHeaders(sheet[m], ROW_START_INDEX, COLUMN_START_INDEX, objectType);
+	    }
+
+	    //각 시트별 데이터 삽입
+	    for (int i=0; i<data.size(); i++) {
+
+	    	int sheetNumber = (int)Math.ceil(i / rowCount);
+
+	    	int rowNumber = 1;
+	    	if(sheetNumber == 0) {
+	    		rowNumber = rowNumber + i;
+	    	}else {
+	    		rowNumber = i - (rowCount*sheetNumber)+1;
+	    	}
+
+	    	//데이터 삽입	(시트, 데이터, row 위치, cell 위치, 데이터 Class Type)
+            createBody(sheet[sheetNumber], data.get(i), rowNumber, COLUMN_START_INDEX, objectType);
+        }
+
+    }
+
+
+    /**
+     * 시트 헤더 생성
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param sheet
+     * @param rowStartIndex
+     * @param columnStartIndex
+     * @param objectType
+     * @return : void
+     */
+    private void createHeaders(SXSSFSheet sheet, int rowStartIndex, int columnStartIndex, Class<T> objectType) {
+    	//row 생성 ( row 위치 )
+        SXSSFRow row = sheet.createRow(rowStartIndex);
+        Font font = wb.createFont();
+
+        // 데이터 Class type으로 해당 각 field 정보 추출
+        for (Field declaredField : objectType.getDeclaredFields()) {
+        	// 해당 field가 @ExcelColumn 어노테이션을 가질 경우만
+        	if(declaredField.isAnnotationPresent(ExcelColumn.class)) {
+
+        		//cell 생성
+        		SXSSFCell cell = row.createCell(columnStartIndex);
+
+        		//@ExcelColumn 어노테이션 정보 추출
+                ExcelColumn annotation = declaredField.getAnnotation(ExcelColumn.class);
+                font.setBold(true);
+
+                CellStyle cellStyle = wb.createCellStyle();
+                cellStyle.setFont(font);
+
+                //좌우 정렬 설정 left, center, right
+                if(ExportColumn.FlexType.left.equals(annotation.FlexType())) {
+                	cellStyle.setAlignment(HorizontalAlignment.LEFT);
+                }else if(ExportColumn.FlexType.center.equals(annotation.FlexType())) {
+                	cellStyle.setAlignment(HorizontalAlignment.CENTER);
+                }else {
+                	cellStyle.setAlignment(HorizontalAlignment.RIGHT);
+                }
+                cell.setCellStyle(cellStyle);
+
+                //헤더 이름 세팅 @ExcelColumn > HeaderName
+                cell.setCellValue(annotation.HeaderName());
+
+                //헤더 width 설정
+                sheet.setColumnWidth(columnStartIndex, annotation.ColumnWidth());
+
+                columnStartIndex++;
+        	}
+        }
+    }
+
+
+    /**
+     * 데이터 엑셀 row 배치
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param sheet
+     * @param obj
+     * @param i
+     * @param columnStartIndex
+     * @param objectType
+     * @return : void
+     */
+    private void createBody(SXSSFSheet sheet, Object obj, int i, int columnStartIndex,  Class<T> objectType) {
+    	//row 생성
+    	SXSSFRow row = sheet.createRow(i);
+    	// 데이터 Class type으로 해당 각 field 정보 추출
+        for (Field declaredField : objectType.getDeclaredFields()) {
+        	// 해당 field가 @ExcelColumn 어노테이션을 가질 경우만
+        	if(declaredField.isAnnotationPresent(ExcelColumn.class)) {
+        		//cell 생성
+        		SXSSFCell cell = row.createCell(columnStartIndex++);
+        		//각 필드 조회
+                Field field = getField(obj.getClass(), declaredField.getName());
+        		//@ExcelColumn 어노테이션 정보 추출
+                ExcelColumn annotation = declaredField.getAnnotation(ExcelColumn.class);
+
+                //필드 접근 허용 (Class<T> objectType)
+                //getDeclaredFields > private, public, protected 모두 접근가능( 단 setAccessible(true)로 접근 가능하게 해줘야 함 )
+                //getFields > public 만 접근 가능
+                field.setAccessible(true);
+
+                try {
+                	// 값 추출
+                    Object value = field.get(obj);
+
+                    //cell 세팅 (값, cell, 데이터 타입, 정렬 타입)
+                    addCellValueByType(value, cell, annotation.DataType(), annotation.FlexType());
+                } catch (IllegalAccessException e) {
+                    throw new RuntimeException(e);
+                }
+        	}
+        }
+
+    }
+
+    /**
+     * 필드 조회
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param aClass
+     * @param name
+     * @return
+     * @return : Field
+     */
+    private Field getField(Class<?> aClass, String name) {
+        try {
+            return aClass.getDeclaredField(name);
+        } catch (NoSuchFieldException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    /**
+     * 각 cell 세팅
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param value
+     * @param cell
+     * @param dataType
+     * @param flexType
+     * @return : void
+     */
+    private void addCellValueByType(Object value, SXSSFCell cell, ExportColumn.DataType dataType, ExportColumn.FlexType flexType){
+
+    	//cell style 생성
+        CellStyle cellStyle = wb.createCellStyle();
+
+        //cell 정렬
+        if(ExportColumn.FlexType.left.equals(flexType)) {
+        	cellStyle.setAlignment(HorizontalAlignment.LEFT);
+        }else if(ExportColumn.FlexType.center.equals(flexType)) {
+        	cellStyle.setAlignment(HorizontalAlignment.CENTER);
+        }else {
+        	cellStyle.setAlignment(HorizontalAlignment.RIGHT);
+        }
+
+        //cell 데이터 타입
+        // 통화 (#,##)
+        if(ExportColumn.DataType.currency.equals(dataType)){
+            DataFormat format = wb.createDataFormat();
+            cellStyle.setDataFormat(format.getFormat("#,##0"));
+            cell.setCellType(CellType.NUMERIC);
+            cell.setCellStyle(cellStyle);
+            cell.setCellValue(Double.parseDouble(value.toString()));
+
+        //날짜 yyyy-MM-dd
+        }else if(ExportColumn.DataType.date.equals(dataType)){
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
+            cell.setCellValue(format.format(value));
+
+        //날짜 yyyy-MM-dd HH:mm:ss
+        }else if(ExportColumn.DataType.datetime.equals(dataType)){
+            SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            cell.setCellValue(format.format(value));
+
+        //퍼센트
+        }else if(ExportColumn.DataType.percentage.equals(dataType)){
+            Double d = Double.valueOf(value.toString()) * 100;
+            cell.setCellValue(Math.floor(d * 100)/100 + "%");
+
+        //숫자
+        }else if(ExportColumn.DataType.number.equals(dataType)){
+            cell.setCellType(CellType.NUMERIC);
+            cell.setCellValue(Double.parseDouble(value.toString()));
+        }else{
+            cell.setCellStyle(cellStyle);
+            cell.setCellValue(value == null ? "" : value.toString());
+        }
+
+    }
+
+    /**
+     * 엑셀 다운로드
+     * @author : yjh96080
+     * @date : 2023. 10. 12.
+     * @param res
+     * @param fileName
+     * @throws IOException
+     * @return : void
+     */
+    public void write(HttpServletResponse res, String fileName) throws IOException {
+        res.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(fileName + ".xlsx", "UTF-8") + ";");
+        wb.write(res.getOutputStream());
+        wb.close();
+        res.getOutputStream().close();
+    }
+}
